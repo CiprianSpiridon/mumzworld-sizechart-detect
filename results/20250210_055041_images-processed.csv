@@ -1,4 +1,0 @@
-sku,image 1,image 2,image 3,image 1 result,image 2 result,image 3 result
-sku-1,,,,YES,ERROR - No image,ERROR - No image
-sku-2,,,,YES,YES,YES
-sku-3,,,,NO,ERROR - No image,ERROR - No image
