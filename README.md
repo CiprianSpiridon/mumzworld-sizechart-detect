@@ -18,140 +18,83 @@ A Node.js application that detects size charts in product images using image pro
 
 ## Prerequisites
 
-- Node.js >= 14.0.0
-- Tesseract OCR
-
-### Installing Tesseract OCR
-
-#### macOS
-```bash
-brew install tesseract
-```
-
-#### Ubuntu/Debian
-```bash
-sudo apt-get install tesseract-ocr
-```
-
-#### Windows
-Download and install from: https://github.com/UB-Mannheim/tesseract/wiki
+1. Node.js >= 14.0.0
+2. Tesseract OCR:
+   ```bash
+   # macOS
+   brew install tesseract
+   
+   # Ubuntu/Debian
+   sudo apt-get install tesseract-ocr
+   
+   # Windows
+   # Download installer from: https://github.com/UB-Mannheim/tesseract/wiki
+   ```
 
 ## Installation
 
-1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/mumzworld-sizechart-detection.git
-cd mumzworld-sizechart-detection
-```
-
-2. Install dependencies:
-```bash
+git clone https://github.com/CiprianSpiridon/mumzworld-sizechart-detect.git
+cd mumzworld-sizechart-detect
 npm install
 ```
 
 ## Usage
 
-The script supports four different ways to process images:
-
-### 1. Process a Local Directory of Images
-
-For processing local images organized in folders:
-
+### Process Images Directory
+Process a folder containing SKU subfolders with images:
 ```bash
-node index.js ./path/to/images
-```
-
-Directory structure should be:
-```
-images/
-  ├── SKU123/
-  │   ├── image1.jpg
-  │   └── image2.webp
-  └── SKU456/
-      ├── image3.jpg
-      └── image4.webp
-```
-
-The script will:
-- Use the folder name as SKU
-- Process up to 3 images per SKU (sorted alphabetically)
-- Create `TIMESTAMP_images-processed.csv` in the results directory
-
-Example using the local images folder:
-```bash
+# Process all SKUs in the images directory
 node index.js ./images
+
+# Directory structure example:
+images/
+├── SKU123/
+│   ├── 1.jpg
+│   ├── 2.webp
+│   └── 3.png
+└── SKU456/
+    ├── front.jpg
+    └── back.png
 ```
 
-This will process all SKU folders in the `images` directory and create a timestamped results file like `20240210_055225_images-processed.csv` in the `results` directory.
-
-### 2. Process a Local CSV File
-
-For processing a local CSV file containing image URLs:
+### Process CSV File
+Supports local files, remote URLs, and Google Sheets:
 
 ```bash
-node index.js --csv ./path/to/your/input.csv
+# Local CSV
+node index.js --csv ./csv-data/sku-size1.csv
+
+# Remote CSV
+node index.js --csv https://cdn.example.com/products/size-charts.csv
+
+# Google Sheet
+node index.js --csv "https://docs.google.com/spreadsheets/d/1A2B3C4D5E6F7G8H9I0J/edit?usp=sharing"
 ```
 
-CSV format should be:
+CSV format example:
 ```csv
 sku,image 1,image 2,image 3
-SKU123,http://example.com/image1.jpg,http://example.com/image2.jpg,http://example.com/image3.jpg
+SKU123,https://cdn.example.com/products/SKU123-1.jpg,https://cdn.example.com/products/SKU123-2.jpg,https://cdn.example.com/products/SKU123-3.jpg
+SKU456,https://cdn.example.com/products/SKU456-front.jpg,https://cdn.example.com/products/SKU456-back.jpg,
+SKU789,https://cdn.example.com/products/SKU789-main.webp,,
 ```
 
-Example using the local CSV file:
-```bash
-node index.js --csv ./csv-data/sku-size1.csv
-```
-
-This will process all SKUs in the CSV file and create a timestamped results file like `20240210_055830_sku-size1-processed.csv` in the `results` directory.
-
-### 3. Process a Remote CSV File
-
-For processing a CSV file from a URL:
-
-```bash
-node index.js --csv https://example.com/path/to/input.csv
-```
-
-The remote CSV should follow the same format as local CSV files.
-
-### 4. Process a Google Sheet
-
-For processing data directly from Google Sheets:
-
-```bash
-node index.js --csv "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
-```
-
-Requirements for Google Sheets:
-- Sheet must be publicly accessible (set to "Anyone with the link" or "Public")
+For Google Sheets:
+- Must be publicly accessible or shared with view access
 - First sheet should contain the data
-- Column headers must be: `sku`, `image 1`, `image 2`, `image 3`
+- Same column headers as CSV format
+- Example sheet: [Size Charts Template](https://docs.google.com/spreadsheets/d/1A2B3C4D5E6F7G8H9I0J/edit?usp=sharing)
 
-Supported Google Sheet URL formats:
-- Regular URL: `https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit`
-- Sharing URL: `https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit?usp=sharing`
-
-Example using the test Google Sheet:
-```bash
-node index.js --csv "https://docs.google.com/spreadsheets/d/18lJiQgihyP4ejH48U1W7lN_SDCi4DGMOUgBsLm-G_Uc/edit?usp=sharing"
+Results are saved in the `results` directory with timestamp prefix, for example:
+```
+results/
+└── 20240210_055830_sku-size1-processed.csv
 ```
 
-This example sheet contains sample SKUs with their corresponding image URLs from the Mumzworld catalog.
+## Deployment
 
-## Output Format
-
-For all input methods, the script generates a CSV file in the `results` directory with the format:
-```csv
-sku,image 1,image 2,image 3,image 1 result,image 2 result,image 3 result
-```
-
-Each `result` column will contain:
-- `YES`: Image contains a size chart
-- `NO`: Image does not contain a size chart
-- `ERROR - No image`: No image URL/file provided
-- `ERROR - Not a valid image`: File is not a valid image
-- `ERROR - Processing failed`: Failed to process the image
+See [AWS Deployment Guide](AWS_DEPLOYMENT.md) for deployment instructions.
 
 ## Console Output
 
