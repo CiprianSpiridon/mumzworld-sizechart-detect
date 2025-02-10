@@ -1,0 +1,330 @@
+name: Deploy to AWS EC2
+
+on:
+  push:
+    branches: 
+      - ${{ github.event.repository.default_branch }}
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      # Application settings
+      APP_NAME: ${{ secrets.APP_NAME || 'sizechart-detection' }}
+      DOCKER_WORKDIR: ${{ secrets.DOCKER_WORKDIR || '/usr/src/app' }}
+      DATA_DIR: ${{ secrets.DATA_DIR || 'data' }}
+      
+      # Infrastructure settings
+      TF_VAR_vpc_cidr: ${{ secrets.VPC_CIDR || '10.0.0.0/16' }}
+      TF_VAR_subnet_cidr: ${{ secrets.SUBNET_CIDR || '10.0.1.0/24' }}
+      TF_VAR_instance_type: ${{ secrets.INSTANCE_TYPE || 't3.medium' }}
+      TF_VAR_volume_size: ${{ secrets.VOLUME_SIZE || '30' }}
+      TF_VAR_volume_type: ${{ secrets.VOLUME_TYPE || 'gp3' }}
+      TF_VAR_instance_username: ${{ secrets.INSTANCE_USERNAME || 'ec2-user' }}
+      
+      # Security settings
+      TF_VAR_ssh_ingress_cidr: ${{ secrets.SSH_INGRESS_CIDR || '0.0.0.0/0' }}
+      TF_VAR_ssh_port: ${{ secrets.SSH_PORT || '22' }}
+      
+      # AMI settings
+      TF_VAR_ami_pattern: ${{ secrets.AMI_PATTERN || 'al2023-ami-*-x86_64' }}
+      TF_VAR_ami_owner: ${{ secrets.AMI_OWNER || 'amazon' }}
+      
+      # SSH key settings
+      SSH_KEY_TYPE: ${{ secrets.SSH_KEY_TYPE || 'rsa' }}
+      SSH_KEY_BITS: ${{ secrets.SSH_KEY_BITS || '2048' }}
+      
+      # Terraform settings
+      TF_VERSION: ${{ secrets.TF_VERSION || '1.0.0' }}
+      
+      # Docker settings
+      DOCKER_LATEST_TAG: ${{ secrets.DOCKER_LATEST_TAG || 'latest' }}
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v1
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Generate SSH Key
+      run: |
+        ssh-keygen -t ${{ env.SSH_KEY_TYPE }} -b ${{ env.SSH_KEY_BITS }} -f id_rsa -N ""
+        echo "TF_VAR_public_key=$(cat id_rsa.pub)" >> $GITHUB_ENV
+        echo "EC2_SSH_KEY=$(cat id_rsa)" >> $GITHUB_ENV
+
+    - name: Create Terraform Configuration
+      run: |
+        cat > main.tf << 'EOF'
+        provider "aws" {
+          region = var.aws_region
+        }
+
+        # Variables
+        variable "aws_region" { type = string }
+        variable "vpc_cidr" { type = string }
+        variable "subnet_cidr" { type = string }
+        variable "instance_type" { type = string }
+        variable "volume_size" { type = string }
+        variable "volume_type" { type = string }
+        variable "instance_username" { type = string }
+        variable "public_key" { type = string }
+        variable "app_name" { type = string }
+        variable "ssh_ingress_cidr" { type = string }
+        variable "ssh_port" { type = string }
+        variable "ami_pattern" { type = string }
+        variable "ami_owner" { type = string }
+
+        # ECR Repository
+        resource "aws_ecr_repository" "app" {
+          name = var.app_name
+        }
+
+        # VPC
+        resource "aws_vpc" "main" {
+          cidr_block           = var.vpc_cidr
+          enable_dns_hostnames = true
+          enable_dns_support   = true
+
+          tags = {
+            Name = "${var.app_name}-vpc"
+          }
+        }
+
+        # Internet Gateway
+        resource "aws_internet_gateway" "main" {
+          vpc_id = aws_vpc.main.id
+
+          tags = {
+            Name = "${var.app_name}-igw"
+          }
+        }
+
+        # Subnet
+        resource "aws_subnet" "main" {
+          vpc_id                  = aws_vpc.main.id
+          cidr_block              = var.subnet_cidr
+          map_public_ip_on_launch = true
+          availability_zone       = data.aws_availability_zones.available.names[0]
+
+          tags = {
+            Name = "${var.app_name}-subnet"
+          }
+        }
+
+        # Route Table
+        resource "aws_route_table" "main" {
+          vpc_id = aws_vpc.main.id
+
+          route {
+            cidr_block = "0.0.0.0/0"
+            gateway_id = aws_internet_gateway.main.id
+          }
+
+          tags = {
+            Name = "${var.app_name}-rt"
+          }
+        }
+
+        # Route Table Association
+        resource "aws_route_table_association" "main" {
+          subnet_id      = aws_subnet.main.id
+          route_table_id = aws_route_table.main.id
+        }
+
+        # Security Group
+        resource "aws_security_group" "app" {
+          name        = "${var.app_name}-sg"
+          description = "Security group for ${var.app_name}"
+          vpc_id      = aws_vpc.main.id
+          
+          ingress {
+            from_port   = var.ssh_port
+            to_port     = var.ssh_port
+            protocol    = "tcp"
+            cidr_blocks = [var.ssh_ingress_cidr]
+          }
+          
+          egress {
+            from_port   = 0
+            to_port     = 0
+            protocol    = "-1"
+            cidr_blocks = ["0.0.0.0/0"]
+          }
+
+          tags = {
+            Name = "${var.app_name}-sg"
+          }
+        }
+
+        # IAM Role
+        resource "aws_iam_role" "ec2_role" {
+          name = "${var.app_name}-ec2-role"
+          
+          assume_role_policy = jsonencode({
+            Version = "2012-10-17"
+            Statement = [
+              {
+                Action = "sts:AssumeRole"
+                Effect = "Allow"
+                Principal = {
+                  Service = "ec2.amazonaws.com"
+                }
+              }
+            ]
+          })
+        }
+
+        # ECR Policy
+        resource "aws_iam_role_policy" "ecr_policy" {
+          name = "ecr-policy"
+          role = aws_iam_role.ec2_role.id
+
+          policy = jsonencode({
+            Version = "2012-10-17"
+            Statement = [
+              {
+                Effect = "Allow"
+                Action = [
+                  "ecr:GetAuthorizationToken",
+                  "ecr:BatchCheckLayerAvailability",
+                  "ecr:GetDownloadUrlForLayer",
+                  "ecr:BatchGetImage"
+                ]
+                Resource = "*"
+              }
+            ]
+          })
+        }
+
+        # Instance Profile
+        resource "aws_iam_instance_profile" "ec2_profile" {
+          name = "${var.app_name}-profile"
+          role = aws_iam_role.ec2_role.name
+        }
+
+        # Latest AMI
+        data "aws_ami" "selected" {
+          most_recent = true
+          owners      = [var.ami_owner]
+
+          filter {
+            name   = "name"
+            values = [var.ami_pattern]
+          }
+        }
+
+        # Available AZs
+        data "aws_availability_zones" "available" {
+          state = "available"
+        }
+
+        # SSH Key
+        resource "aws_key_pair" "app" {
+          key_name   = "${var.app_name}-key"
+          public_key = var.public_key
+        }
+
+        # EC2 Instance
+        resource "aws_instance" "app" {
+          ami                    = data.aws_ami.selected.id
+          instance_type          = var.instance_type
+          key_name              = aws_key_pair.app.key_name
+          subnet_id             = aws_subnet.main.id
+          iam_instance_profile  = aws_iam_instance_profile.ec2_profile.name
+          vpc_security_group_ids = [aws_security_group.app.id]
+
+          root_block_device {
+            volume_size = var.volume_size
+            volume_type = var.volume_type
+          }
+          
+          user_data = <<-EOF
+                      #!/bin/bash
+                      dnf update -y
+                      dnf install -y docker git
+                      systemctl start docker
+                      systemctl enable docker
+                      usermod -a -G docker ${var.instance_username}
+                      mkdir -p /home/${var.instance_username}/data/{csv-data,results,images}
+                      chown -R ${var.instance_username}:${var.instance_username} /home/${var.instance_username}/data
+                      EOF
+
+          tags = {
+            Name = var.app_name
+          }
+        }
+
+        output "instance_ip" {
+          value = aws_instance.app.public_ip
+        }
+
+        output "ecr_repository_url" {
+          value = aws_ecr_repository.app.repository_url
+        }
+        EOF
+
+    - name: Terraform Init
+      run: terraform init
+
+    - name: Terraform Apply
+      run: |
+        terraform apply -auto-approve \
+          -var="aws_region=${{ secrets.AWS_REGION }}" \
+          -var="app_name=${{ env.APP_NAME }}"
+
+    - name: Get EC2 IP
+      id: ec2-ip
+      run: echo "::set-output name=ip::$(terraform output -raw instance_ip)"
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - name: Build and push Docker image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ env.APP_NAME }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.DOCKER_LATEST_TAG }}
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.DOCKER_LATEST_TAG }}
+
+    - name: Deploy to EC2
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ steps.ec2-ip.outputs.ip }}
+        username: ${{ env.TF_VAR_instance_username }}
+        key: ${{ env.EC2_SSH_KEY }}
+        script: |
+          # Login to ECR
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+          
+          # Pull latest image
+          docker pull ${{ steps.login-ecr.outputs.registry }}/${{ env.APP_NAME }}:${{ env.DOCKER_LATEST_TAG }}
+          
+          # Stop and remove existing container if it exists
+          docker ps -q --filter "name=${{ env.APP_NAME }}" | grep -q . && docker stop ${{ env.APP_NAME }} && docker rm ${{ env.APP_NAME }} || true
+          
+          # Ensure directories exist
+          mkdir -p ~/${{ env.DATA_DIR }}/{csv-data,results,images}
+          
+          # Run new container
+          docker run -d \
+            --name ${{ env.APP_NAME }} \
+            --restart unless-stopped \
+            -v ~/${{ env.DATA_DIR }}/csv-data:${{ env.DOCKER_WORKDIR }}/csv-data \
+            -v ~/${{ env.DATA_DIR }}/results:${{ env.DOCKER_WORKDIR }}/results \
+            -v ~/${{ env.DATA_DIR }}/images:${{ env.DOCKER_WORKDIR }}/images \
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.APP_NAME }}:${{ env.DOCKER_LATEST_TAG }} 
