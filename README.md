@@ -69,7 +69,7 @@ node index.js --csv ./csv-data/sku-size1.csv
 node index.js --csv https://cdn.example.com/products/size-charts.csv
 
 # Google Sheet
-node index.js --csv "https://docs.google.com/spreadsheets/d/1A2B3C4D5E6F7G8H9I0J/edit?usp=sharing"
+node index.js --csv "https://docs.google.com/spreadsheets/d/18lJiQgihyP4ejH48U1W7lN_SDCi4DGMOUgBsLm-G_Uc/edit"
 ```
 
 CSV format example:
