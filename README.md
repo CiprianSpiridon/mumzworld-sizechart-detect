@@ -9,7 +9,11 @@ A Node.js application that detects size charts in product images using image pro
 - Supports multiple image formats (JPG, PNG, WebP)
 - Provides confidence scores and detailed analysis
 - Pure Node.js implementation
-- Processes CSV files with image URLs
+- Processes multiple input formats:
+  - Local folders with images
+  - Local CSV files
+  - Remote CSV files
+  - Google Sheets
 - Parallel image processing for better performance
 
 ## Prerequisites
@@ -47,107 +51,76 @@ npm install
 
 ## Usage
 
-There are two ways to use this script:
+The script supports four different ways to process images:
 
-### 1. Process a CSV File with Image URLs
+### 1. Process a Local Directory of Images
 
-This is the recommended method for bulk processing. You can use either a local CSV file or a URL.
-
-#### Using a Local CSV File:
-```bash
-# Create your CSV file with columns: sku,image 1,image 2,image 3
-# Then run:
-node index.js --csv ./path/to/your/input.csv
-```
-
-#### Using a CSV File from URL:
-```bash
-node index.js --csv https://example.com/path/to/input.csv
-```
-
-The script will:
-1. Read the CSV file
-2. Process each row in parallel
-3. Create an output file with `-processed` added to the name
-   - Example: `input.csv` → `input-processed.csv`
-
-### 2. Process a Directory of Images
-
-If you have local images organized in folders:
+For processing local images organized in folders:
 
 ```bash
-# Option 1: Using npm script
-npm run detect ./path/to/images
-
-# Option 2: Direct node command
 node index.js ./path/to/images
 ```
 
-Your images should be organized like this:
+Directory structure should be:
 ```
 images/
-  SKU123/
-    image1.jpg
-    image2.webp
-  SKU456/
-    image3.jpg
-    image4.webp
+  ├── SKU123/
+  │   ├── image1.jpg
+  │   └── image2.webp
+  └── SKU456/
+      ├── image3.jpg
+      └── image4.webp
 ```
 
 The script will:
-1. Use the root folder name for the output file (e.g., `images-processed.csv`)
-2. Treat each subfolder name as the SKU
-3. Process up to 3 images per SKU folder (sorted alphabetically)
-4. Generate a CSV file with the same format as CSV processing
+- Use the folder name as SKU
+- Process up to 3 images per SKU (sorted alphabetically)
+- Create `TIMESTAMP_images-processed.csv` in the results directory
 
-For example, running:
+### 2. Process a Local CSV File
+
+For processing a local CSV file containing image URLs:
+
 ```bash
-node index.js ./product-images
+node index.js --csv ./path/to/your/input.csv
 ```
 
-Will create `product-images-processed.csv` with:
-```csv
-sku,image 1,image 2,image 3,image 1 result,image 2 result,image 3 result
-SKU123,image1.jpg,image2.webp,,YES,NO,
-SKU456,image3.jpg,image4.webp,,NO,YES,
-```
-
-### Quick Start Example
-
-1. Create a test CSV file named `test.csv`:
+CSV format should be:
 ```csv
 sku,image 1,image 2,image 3
 SKU123,http://example.com/image1.jpg,http://example.com/image2.jpg,http://example.com/image3.jpg
 ```
 
-2. Run the script:
+### 3. Process a Remote CSV File
+
+For processing a CSV file from a URL:
+
 ```bash
-node index.js --csv test.csv
+node index.js --csv https://example.com/path/to/input.csv
 ```
 
-3. Check the results in `test-processed.csv`
+The remote CSV should follow the same format as local CSV files.
 
-### Console Output
+### 4. Process a Google Sheet
 
-While running, you'll see progress information like this:
+For processing data directly from Google Sheets:
 
-```
-Processing CSV file: ./csv-data/sku-size1.csv
-Output will be saved to: csv-data/sku-size1-processed.csv
-
-Processing row 1 - SKU: GACS-IN0IN00176YAF007-White-CONFIG
-├─ Image 1: https://s3-pwa-prod.mumzworld.com/media/catalog...
-├─ Image 2: https://s3-pwa-prod.mumzworld.com/media/catalog...
-└─ Image 3: empty
-   ├─ Image 2 Result: NO (Confidence: 0.0%)
-   ├─ Image 1 Result: NO (Confidence: 0.0%)
-
-[... more rows ...]
+```bash
+node index.js --csv "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
 ```
 
-### Output Format
+Requirements for Google Sheets:
+- Sheet must be publicly accessible (set to "Anyone with the link" or "Public")
+- First sheet should contain the data
+- Column headers must be: `sku`, `image 1`, `image 2`, `image 3`
 
-The script generates a CSV file with these columns:
+Supported Google Sheet URL formats:
+- Regular URL: `https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit`
+- Sharing URL: `https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit?usp=sharing`
+
+## Output Format
+
+For all input methods, the script generates a CSV file in the `results` directory with the format:
 ```csv
 sku,image 1,image 2,image 3,image 1 result,image 2 result,image 3 result
 ```
@@ -155,8 +128,29 @@ sku,image 1,image 2,image 3,image 1 result,image 2 result,image 3 result
 Each `result` column will contain:
 - `YES`: Image contains a size chart
 - `NO`: Image does not contain a size chart
-- `ERROR`: Failed to process image
-- Empty: No image URL provided
+- `ERROR - No image`: No image URL/file provided
+- `ERROR - Not a valid image`: File is not a valid image
+- `ERROR - Processing failed`: Failed to process the image
+
+## Console Output
+
+While running, you'll see progress information:
+
+```
+Processing CSV file: ./csv-data/sku-size1.csv
+Output will be saved to: results/20240210_055830_sku-size1-processed.csv
+
+Processing row 1 - SKU: SKU123
+├─ Image 1: http://example.com/image1.jpg
+├─ Image 2: http://example.com/image2.jpg
+└─ Image 3: empty
+   ├─ Image 1 Result: YES (Confidence: 85.5%)
+   ├─ Image 2 Result: NO (Confidence: 15.2%)
+   └─ Image 3 Result: ERROR - No image
+
+Progress: 1/10 rows (10.0%)
+Speed: 0.5 rows/sec - Errors: 0
+```
 
 ## How it Works
 
@@ -174,8 +168,8 @@ Each `result` column will contain:
    - Combines structural analysis (lines) with textual analysis (keywords)
    - Provides detailed confidence breakdown
 
-4. CSV Processing:
-   - Downloads images from URLs
+4. Processing Pipeline:
+   - Downloads images from URLs (for CSV/Sheets input)
    - Processes images in parallel
    - Caches downloaded images for efficiency
    - Provides detailed progress logging
