@@ -1,0 +1,29 @@
+{
+  "name": "mumzworld-sizechart-detection",
+  "version": "1.0.0",
+  "description": "Size chart detection using Tesseract OCR and image processing",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "detect": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "image",
+    "processing",
+    "ocr",
+    "size-chart",
+    "tesseract",
+    "table-detection"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "node-tesseract-ocr": "^2.2.1",
+    "sharp": "^0.33.2",
+    "jimp": "^0.22.10"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+} 
