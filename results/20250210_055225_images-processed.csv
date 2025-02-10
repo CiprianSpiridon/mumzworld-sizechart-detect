@@ -1,0 +1,4 @@
+sku,image 1,image 2,image 3,image 1 result,image 2 result,image 3 result
+sku-1,/Users/Ciprian/work/mumzworld/mumzworld-sizechart-detection/images/sku-1/1.webp,,,YES,ERROR - No image,ERROR - No image
+sku-2,/Users/Ciprian/work/mumzworld/mumzworld-sizechart-detection/images/sku-2/2.webp,/Users/Ciprian/work/mumzworld/mumzworld-sizechart-detection/images/sku-2/3.webp,/Users/Ciprian/work/mumzworld/mumzworld-sizechart-detection/images/sku-2/4.webp,YES,YES,YES
+sku-3,/Users/Ciprian/work/mumzworld/mumzworld-sizechart-detection/images/sku-3/IN0IN00176YAF-1.jpg.webp,,,NO,ERROR - No image,ERROR - No image
