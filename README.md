@@ -77,6 +77,13 @@ The script will:
 - Process up to 3 images per SKU (sorted alphabetically)
 - Create `TIMESTAMP_images-processed.csv` in the results directory
 
+Example using the local images folder:
+```bash
+node index.js ./images
+```
+
+This will process all SKU folders in the `images` directory and create a timestamped results file like `20240210_055225_images-processed.csv` in the `results` directory.
+
 ### 2. Process a Local CSV File
 
 For processing a local CSV file containing image URLs:
@@ -90,6 +97,13 @@ CSV format should be:
 sku,image 1,image 2,image 3
 SKU123,http://example.com/image1.jpg,http://example.com/image2.jpg,http://example.com/image3.jpg
 ```
+
+Example using the local CSV file:
+```bash
+node index.js --csv ./csv-data/sku-size1.csv
+```
+
+This will process all SKUs in the CSV file and create a timestamped results file like `20240210_055830_sku-size1-processed.csv` in the `results` directory.
 
 ### 3. Process a Remote CSV File
 
@@ -117,6 +131,13 @@ Requirements for Google Sheets:
 Supported Google Sheet URL formats:
 - Regular URL: `https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit`
 - Sharing URL: `https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit?usp=sharing`
+
+Example using the test Google Sheet:
+```bash
+node index.js --csv "https://docs.google.com/spreadsheets/d/18lJiQgihyP4ejH48U1W7lN_SDCi4DGMOUgBsLm-G_Uc/edit?usp=sharing"
+```
+
+This example sheet contains sample SKUs with their corresponding image URLs from the Mumzworld catalog.
 
 ## Output Format
 
